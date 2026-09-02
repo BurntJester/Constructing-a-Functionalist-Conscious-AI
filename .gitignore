@@ -1,0 +1,15 @@
+# Security
+.env
+
+# Local System State & Data
+agent_meta.json
+sessions/
+personas/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
