@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conscious AI Ensemble</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root { --bg: #0b0b0d; --sidebar: #171717; --chat: #212121; --accent: #10a37f; --border: #333; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: #ececec; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        #sidebar { width: 280px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; }
+        #history-list { flex: 1; overflow-y: auto; margin-top: 20px; }
+        
+        .history-item { 
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; border-radius: 6px; cursor: pointer; font-size: 0.85em; margin-bottom: 5px; 
+            background: #212121; border: 1px solid transparent; transition: 0.2s; 
+        }
+        .history-item:hover { background: #2a2a2a; border-color: #444; }
+        .history-item.active { border-color: var(--accent); background: #2a2a2a; }
+        .history-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        .item-actions { display: none; gap: 5px; }
+        .history-item:hover .item-actions { display: flex; }
+        .action-btn { background: none; border: none; color: #888; cursor: pointer; padding: 2px; font-size: 14px; }
+        .action-btn:hover { color: white; }
+
+        #main { flex: 1; display: flex; flex-direction: column; position: relative; }
+        #chat-container { flex: 1; overflow-y: auto; padding: 40px 20px; max-width: 800px; margin: 0 auto; width: 100%; }
+        
+        .message { margin-bottom: 30px; line-height: 1.6; position: relative; }
+        .label { font-weight: bold; font-size: 0.75em; color: #888; margin-bottom: 10px; text-transform: uppercase; }
+        
+        details.xray { background: #1a1a1f; border-left: 3px solid var(--accent); margin-top: 15px; border-radius: 4px; }
+        details.xray summary { padding: 10px; cursor: pointer; font-size: 0.85em; font-weight: bold; list-style: none; }
+        .xray-content pre { padding: 15px; margin: 0; white-space: pre-wrap; font-family: 'Consolas', monospace; color: #a3b8cc; font-size: 0.85em; }
+
+        #input-area { padding: 30px; display: flex; justify-content: center; background: var(--bg); border-top: 1px solid var(--border); }
+        #chat-input { 
+            width: 100%; max-width: 740px; background: var(--chat); border: 1px solid var(--border); 
+            color: white; padding: 15px; border-radius: 10px; outline: none; resize: none; 
+            font-size: 1em; box-sizing: border-box;
+            min-height: 52px; max-height: 200px; overflow-y: auto; 
+        }
+
+        .message-content { line-height: 1.6; font-size: 0.95em; }
+        .message-content p { margin: 0 0 1em 0; }
+        .message-content p:last-child { margin-bottom: 0; }
+        .message-content pre { background: #121214; padding: 15px; border-radius: 8px; overflow-x: auto; margin: 15px 0; border: 1px solid var(--border); }
+        .message-content code { font-family: 'Consolas', monospace; background: #2a2a30; padding: 3px 6px; border-radius: 4px; font-size: 0.9em; color: #e2a668; }
+        .message-content pre code { background: none; padding: 0; color: inherit; }
+        .message-content ul, .message-content ol { margin-top: 0; padding-left: 20px; }
+        .message-content blockquote { border-left: 3px solid var(--accent); margin: 0; padding-left: 15px; color: #aaa; background: #1a1a1f; padding-top: 10px; padding-bottom: 10px; border-radius: 0 4px 4px 0; }
+
+        .msg-actions { 
+            position: absolute; top: 15px; right: 15px; 
+            display: none; gap: 8px; 
+        }
+        .message:hover .msg-actions { display: flex; }
+        
+        .utility-btn { 
+            background: #2a2a30; border: 1px solid var(--border); 
+            color: #aaa; padding: 5px 10px; border-radius: 5px; 
+            cursor: pointer; font-size: 0.8em; font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+        }
+        .utility-btn:hover { background: #333; color: white; border-color: #555; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <button style="width:100%; padding:12px; cursor:pointer; background: #ececec; color: black; border: none; border-radius: 6px; font-weight: bold;" onclick="newChat()">+ New Chat</button>
+        <div id="history-list"></div>
+    </div>
+
+    <div id="main">
+        <div id="chat-container"></div>
+        <div id="input-area">
+            <textarea id="chat-input" placeholder="Message Ensemble..." rows="1" onkeydown="handleEnter(event)"></textarea>
+        </div>
+    </div>
+
+    <script>
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            },
+            breaks: true
+        });
+
+        let currentSessionId = null;
+        const chatContainer = document.getElementById('chat-container');
+        const historyList = document.getElementById('history-list');
+        const chatInput = document.getElementById('chat-input');
+
+        chatInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        function copyToClipboard(buttonElement, textToCopy) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = buttonElement.innerHTML;
+                buttonElement.innerHTML = '✔ Copied';
+                buttonElement.style.color = 'var(--accent)';
+                
+                setTimeout(() => {
+                    buttonElement.innerHTML = originalText;
+                    buttonElement.style.color = '#aaa';
+                }, 2000);
+            }).catch(err => {
+                console.error("Clipboard write failed: ", err);
+            });
+        }
+
+        async function loadHistoryList() {
+            try {
+                const resp = await fetch('http://127.0.0.1:8000/sessions');
+                const data = await resp.json();
+                historyList.innerHTML = '';
+                data.sessions.reverse().forEach(session => {
+                    const div = document.createElement('div');
+                    div.className = 'history-item' + (session.id === currentSessionId ? ' active' : '');
+                    
+                    const span = document.createElement('span');
+                    span.textContent = session.title;
+                    span.onclick = () => loadSession(session.id);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'item-actions';
+
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'action-btn';
+                    editBtn.textContent = '✎';
+                    editBtn.onclick = (e) => { e.stopPropagation(); renameSession(session.id, session.title); };
+
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'action-btn';
+                    delBtn.textContent = '🗑';
+                    delBtn.onclick = (e) => { e.stopPropagation(); deleteSession(session.id); };
+
+                    actions.appendChild(editBtn);
+                    actions.appendChild(delBtn);
+                    div.appendChild(span);
+                    div.appendChild(actions);
+                    historyList.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to load history:", e);
+            }
+        }
+
+        async function loadSession(id) {
+            currentSessionId = id;
+            chatContainer.innerHTML = '<div style="color: #888; text-align: center; margin-top: 20px;">Loading conversation...</div>';
+            loadHistoryList(); 
+
+            const resp = await fetch(`http://127.0.0.1:8000/sessions/${id}`);
+            const data = await resp.json();
+            
+            chatContainer.innerHTML = '';
+            data.messages.forEach(m => {
+                const mStr = JSON.stringify(m).toLowerCase();
+                let isHuman = false;
+                
+                if (m.type && (m.type.toLowerCase().includes('human') || m.type.toLowerCase().includes('user'))) {
+                    isHuman = true;
+                } else if (mStr.includes('"type":"human"') || mStr.includes('"type":"user"') || mStr.includes('humanmessage')) {
+                    isHuman = true;
+                }
+
+                const activeName = data.agent_name || 'Ensemble';
+                appendMessage(isHuman ? 'You' : activeName, m.content);
+            });
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function renameSession(id, oldTitle) {
+            const newTitle = prompt("Rename conversation:", oldTitle);
+            if (newTitle && newTitle !== oldTitle) {
+                await fetch(`http://127.0.0.1:8000/sessions/${id}/title`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: newTitle })
+                });
+                loadHistoryList();
+            }
+        }
+
+        async function deleteSession(id) {
+            if (confirm("Delete this conversation?")) {
+                await fetch(`http://127.0.0.1:8000/sessions/${id}`, { method: 'DELETE' });
+                if (currentSessionId === id) newChat();
+                loadHistoryList();
+            }
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            appendMessage('You', text);
+            chatInput.value = '';
+            chatInput.style.height = 'auto';
+
+            const responseId = 'text-' + Date.now();
+            const xrayId = 'xray-' + Date.now();
+            appendAiPlaceholder(responseId, xrayId);
+
+            const response = await fetch('http://127.0.0.1:8000/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, session_id: currentSessionId })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            const xrayEl = document.getElementById(xrayId);
+            const textEl = document.getElementById(responseId);
+
+            xrayEl.closest('details').open = true;
+
+            let buffer = '';
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); 
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const payload = JSON.parse(line.substring(6));
+                            if (!currentSessionId) {
+                                currentSessionId = payload.session_id;
+                                loadHistoryList();
+                            }
+                            updateUiFromStream(payload, textEl, xrayEl);
+                        } catch(e) {
+                            console.error("Incomplete JSON chunk received, waiting for the rest...");
+                        }
+                    }
+                }
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        function updateUiFromStream(payload, textEl, xrayEl) {
+            const node = payload.node;
+            const data = payload.data;
+            let traceLine = `\n[NODE: ${node}]`;
+            
+            if (node === 'calculate_raw_affect') {
+                if (data.last_scores && data.decayed_baselines && Object.keys(data.last_scores).length > 0) {
+                    traceLine += `\n\nTemporal Decay:`;
+                    for (const key in data.last_scores) {
+                        const l = data.last_scores[key].toFixed(2);
+                        const d = data.decayed_baselines[key].toFixed(2);
+                        const marker = (l !== d) ? " ~> " : " == ";
+                        traceLine += `\n  ${key.padEnd(12)} : ${l}${marker}${d}`;
+                    }
+                }
+                
+                if (data.raw_axis_scores && Object.keys(data.raw_axis_scores).length > 0) {
+                    traceLine += `\n\nRaw Affect (Stage 1):`;
+                    for (const key in data.raw_axis_scores) {
+                        const r = data.raw_axis_scores[key].toFixed(2);
+                        traceLine += `\n  ${key.padEnd(12)} : ${r}`;
+                    }
+                }
+            }
+            
+            if (node === 'negotiate_crosstalk') {
+                if (data.axis_scores && data.raw_axis_scores && data.peer_mapping) {
+                    traceLine += `\n\nLateral Cross-Talk (Stage 2):`;
+                    for (const key in data.axis_scores) {
+                        const r = data.raw_axis_scores[key].toFixed(2);
+                        const a = data.axis_scores[key].toFixed(2);
+                        const peer = data.peer_mapping[key];
+                        const marker = (r !== a) ? " -> " : " == ";
+                        traceLine += `\n  ${key.padEnd(12)} (influenced by ${peer}): ${r} ${marker} ${a}`;
+                    }
+                }
+            }
+            
+            if (node === 'bind_phenomenal_state') {
+                try {
+                    const valence = JSON.parse(data.valence_json.replace(/```json|```/g, ''));
+                    xrayEl.closest('details').querySelector('summary').textContent = `State: [${valence.descriptor}] ⏷`;
+                    traceLine += `\n\nState Descriptor: [${valence.descriptor}]`;
+                } catch(e) {
+                    xrayEl.closest('details').querySelector('summary').textContent = `State: [Synthesised] ⏷`;
+                }
+                
+                if (data.semantic_matrix) {
+                    traceLine += `\n\nPhenomenal Matrix (Stage 3):\n${data.semantic_matrix}`;
+                }
+            }
+
+            if (node === 'generate_thoughts') {
+                const vol = data.will_respond !== undefined ? data.will_respond : "Unknown";
+                const th = data.thoughts || "Processing error: thoughts not found.";
+                traceLine += `\n\nVolition (Will Respond): ${vol}`;
+                traceLine += `\nThoughts & Plan: ${th}`;
+            }
+            
+            if (node === 'evaluate_thoughts') {
+                const rev = data.revision_needed !== undefined ? data.revision_needed : "False";
+                const fb = data.thought_feedback ? data.thought_feedback : "None (Thoughts Approved)";
+                traceLine += `\n\nThought Critic (Revision: ${rev})\nFeedback: ${fb}`;
+            }
+
+            if (node === 'evaluate_draft') {
+                const rev = data.revision_needed !== undefined ? data.revision_needed : "False";
+                const fb = data.draft_feedback ? data.draft_feedback : "None (Draft Approved)";
+                traceLine += `\n\nDraft Critic (Revision: ${rev})\nFeedback: ${fb}`;
+            }
+            
+            xrayEl.textContent += traceLine + "\n" + "-".repeat(40);
+
+            if (node === 'FINAL_OUTPUT') {
+                const last = data.messages[0];
+                let innerHTML = '';
+                const senderName = payload.sender_name || 'Ensemble';
+                
+                if (last.content.includes("[The ensemble chose not to respond.]")) {
+                    innerHTML = `<em style="color: #888;">${last.content}</em>`;
+                } else {
+                    innerHTML = `<div class="message-content">${marked.parse(last.content)}</div>`;
+                }
+
+                const safeText = last.content.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '\\n');
+                
+                innerHTML += `
+                <div class="msg-actions">
+                    <button class="utility-btn" onclick="copyToClipboard(this, '${safeText}')">📋 Copy</button>
+                </div>`;
+                
+                textEl.closest('.message').querySelector('.label').textContent = senderName;
+                textEl.innerHTML = innerHTML;
+            }
+        }
+
+        function appendAiPlaceholder(tId, xId) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.innerHTML = `<div class="label">Ensemble</div><div id="${tId}">...</div>
+                             <details class="xray"><summary>Processing... ⏷</summary>
+                             <div class="xray-content"><pre id="${xId}"></pre></div></details>`;
+            chatContainer.appendChild(div);
+        }
+
+        function appendMessage(s, t) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            
+            let innerHTML = `<div class="label">${s}</div><div class="message-content">${marked.parse(t)}</div>`;
+            
+            if (s !== 'You') {
+                const safeText = t.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '\\n');
+                innerHTML += `
+                <div class="msg-actions">
+                    <button class="utility-btn" onclick="copyToClipboard(this, '${safeText}')">📋 Copy</button>
+                </div>`;
+            }
+            
+            div.innerHTML = innerHTML;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function newChat() {
+            currentSessionId = null;
+            chatContainer.innerHTML = '';
+            loadHistoryList();
+        }
+        
+        loadHistoryList();
+    </script>
+</body>
+</html>
