@@ -1,0 +1,8 @@
+langgraph==1.0.10
+langchain-core==1.2.16  
+langchain-google-genai==4.2.1
+python-dotenv==1.2.1
+chromadb
+sentence-transformers
+fastapi
+uvicorn
