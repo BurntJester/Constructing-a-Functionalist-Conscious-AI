@@ -62,6 +62,7 @@ If you use this repository or build upon this architecture in your research, ple
 @article{Tait2026Constructing,
   title={Constructing a Functionalist Conscious AI},
   author={Tait, Izak; Wang, Ziqi; Bensemann, Joshua},
+  URL={https://doi.org/10.5281/zenodo.22272496},
   year={2026}
 }
 ```
